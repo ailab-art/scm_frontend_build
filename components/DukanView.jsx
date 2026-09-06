@@ -94,7 +94,7 @@ export default function DukanView({ tree }) {
                     backgroundSize: '28px 28px',
                   }}
                 >
-                  {status === 'accepted' && doc?.signed_url ? (
+                  {doc?.signed_url ? (
                     <div>
                       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                         <div className="text-sm font-medium">{domain} E2E document</div>
@@ -115,9 +115,10 @@ export default function DukanView({ tree }) {
                       />
                       <div className="text-xs mt-2 text-faint">
                         This link expires after an hour — it's regenerated automatically the next time this page loads.
+                        {status !== 'accepted' && ' Viewable pre-approval so reviewers can actually read it.'}
                       </div>
                     </div>
-                  ) : status === 'accepted' && !doc?.signed_url ? (
+                  ) : status === 'accepted' ? (
                     <div className="text-xs text-review">
                       Marked accepted, but no file is attached yet — set <code className="font-mono">storage_path</code> on this document row in Supabase.
                     </div>
