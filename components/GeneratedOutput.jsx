@@ -23,6 +23,7 @@ export default function GeneratedOutput({ type, content }) {
             </div>
           ))}
         </div>
+        {content.note && <div className="text-xs text-faint mt-3">{content.note}</div>}
       </div>
     );
   }
