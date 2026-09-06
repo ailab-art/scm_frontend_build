@@ -56,7 +56,7 @@ export default function ChetakChat({ sub, mainName, domain }) {
   }
 
   return (
-    <div className="flex flex-col" style={{ height: '65vh' }}>
+    <div className="flex flex-col" style={{ height: '55vh' }}>
       <div className="text-xs text-faint mb-3">
         Context attached: <span className="text-ink font-medium">{mainName} → {sub.name}</span>
         <span className="mx-1.5">·</span>

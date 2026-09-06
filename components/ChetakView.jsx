@@ -1,12 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import LevelSelector from '@/components/LevelSelector';
-import ProcessTree from '@/components/ProcessTree';
-import EmptyState from '@/components/EmptyState';
+import { Zap } from 'lucide-react';
+import MainObjectGrid from '@/components/MainObjectGrid';
+import ProcessChips from '@/components/ProcessChips';
 import Modal from '@/components/Modal';
 import ChetakChat from '@/components/ChetakChat';
 import { useProcessSelection } from '@/lib/use-process-selection';
+
+function defaultDomainFor(sub) {
+  const domains = [...new Set((sub.documents || []).map((d) => d.domain))];
+  return domains.includes('Manufacturing') ? 'Manufacturing' : domains[0] || 'Standard';
+}
 
 export default function ChetakView({ tree }) {
   const { level, mainId, subId, domain, setLevel, setMain, setSub } = useProcessSelection();
@@ -16,38 +21,43 @@ export default function ChetakView({ tree }) {
   const selectedMain = tree.find((mo) => mo.id === mainId) || null;
   const selectedSub = selectedMain?.subObjects.find((s) => s.id === subId) || null;
 
-  function handleSelectSub(mId, sId) {
-    setSub(mId, sId, domain);
+  function openTile(mo) {
     setModalOpen(true);
+    if (mo.subObjects.length === 0) {
+      setMain(mo.id);
+      return;
+    }
+    const first = mo.subObjects[0];
+    setSub(mo.id, first.id, defaultDomainFor(first));
   }
 
   return (
-    <div className="flex gap-6 flex-wrap">
-      <div className="w-80 flex-shrink-0 rounded-xl overflow-hidden border border-border">
-        <div className="p-3">
-          <LevelSelector level={level} onSelect={setLevel} />
-        </div>
-        <ProcessTree
-          mainObjectsForLevel={mainObjectsForLevel}
-          selectedMainId={mainId}
-          selectedSubId={subId}
-          domain={domain}
-          onSelectMain={setMain}
-          onSelectSub={handleSelectSub}
-        />
-      </div>
+    <div>
+      <MainObjectGrid
+        level={level}
+        onSelectLevel={setLevel}
+        mainObjectsForLevel={mainObjectsForLevel}
+        onOpenMain={openTile}
+        icon={Zap}
+        itemLabel="processes"
+      />
 
-      <div className="flex-1" style={{ minWidth: 280 }}>
-        {!selectedSub && <EmptyState text="Select a process to open the AI Chetak assistant." />}
-        {selectedSub && !modalOpen && (
-          <button onClick={() => setModalOpen(true)} className="text-sm px-4 py-2 rounded-md bg-accent text-white">
-            Reopen AI Chetak — {selectedSub.name}
-          </button>
+      <Modal open={modalOpen && !!selectedMain} onClose={() => setModalOpen(false)} title={selectedMain?.name || ''}>
+        {selectedMain && (
+          <>
+            <ProcessChips
+              subObjects={selectedMain.subObjects}
+              selectedSubId={selectedSub?.id}
+              domain={domain}
+              onSelectSub={(sub) => setSub(selectedMain.id, sub.id, defaultDomainFor(sub))}
+            />
+            {selectedSub ? (
+              <ChetakChat sub={selectedSub} mainName={selectedMain.name} domain={domain} />
+            ) : (
+              <div className="text-sm text-faint">Pick a process above to open the AI Chetak assistant.</div>
+            )}
+          </>
         )}
-      </div>
-
-      <Modal open={modalOpen && !!selectedSub} onClose={() => setModalOpen(false)} title={selectedSub?.name || 'AI Chetak'}>
-        {selectedSub && <ChetakChat sub={selectedSub} mainName={selectedMain.name} domain={domain} />}
       </Modal>
     </div>
   );

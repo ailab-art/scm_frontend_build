@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { Layers, GitBranch, Zap, LogOut } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 const TABS = [
-  { href: '/dashboard/dukan', label: 'Knowledge Dukan', icon: Layers },
+  { href: '/dashboard/dukan', label: 'Knowledge Granths', icon: Layers },
   { href: '/dashboard/mela', label: 'Process Flow Mela', icon: GitBranch },
   { href: '/dashboard/chetak', label: 'AI Chetak', icon: Zap },
 ];
