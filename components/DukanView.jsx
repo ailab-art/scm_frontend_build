@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { FileText, Check, Clock, Circle, ArrowUpRight, Layers } from 'lucide-react';
+import { Check, Clock, Circle, ArrowUpRight, Layers } from 'lucide-react';
 import MainObjectGrid from '@/components/MainObjectGrid';
 import ProcessChips from '@/components/ProcessChips';
 import Modal from '@/components/Modal';
@@ -94,23 +94,32 @@ export default function DukanView({ tree }) {
                     backgroundSize: '28px 28px',
                   }}
                 >
-                  {status === 'accepted' ? (
-                    <div className="flex items-center gap-4 flex-wrap">
-                      <div className="w-12 h-14 rounded flex items-center justify-center flex-shrink-0 bg-accepted/10 border border-accepted/40">
-                        <FileText className="w-5 h-5 text-accepted" />
-                      </div>
-                      <div className="flex-1" style={{ minWidth: 160 }}>
+                  {status === 'accepted' && doc?.signed_url ? (
+                    <div>
+                      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                         <div className="text-sm font-medium">{domain} E2E document</div>
-                        <div className="text-xs mt-0.5 text-faint">
-                          {doc?.file_url ? doc.file_url : 'No file_url set yet — upload the accepted PDF and update this row'}
-                        </div>
+                        <a
+                          href={doc.signed_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-border text-faint hover:text-ink flex-shrink-0"
+                        >
+                          Open in new tab <ArrowUpRight className="w-3 h-3" />
+                        </a>
                       </div>
-                      <a
-                        href={doc?.file_url || '#'}
-                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md flex-shrink-0 border border-border text-faint hover:text-ink"
-                      >
-                        Open <ArrowUpRight className="w-3 h-3" />
-                      </a>
+                      <iframe
+                        src={doc.signed_url}
+                        title={selectedSub.name}
+                        className="w-full rounded-lg border border-border"
+                        style={{ height: '55vh' }}
+                      />
+                      <div className="text-xs mt-2 text-faint">
+                        This link expires after an hour — it's regenerated automatically the next time this page loads.
+                      </div>
+                    </div>
+                  ) : status === 'accepted' && !doc?.signed_url ? (
+                    <div className="text-xs text-review">
+                      Marked accepted, but no file is attached yet — set <code className="font-mono">storage_path</code> on this document row in Supabase.
                     </div>
                   ) : (
                     <div>
