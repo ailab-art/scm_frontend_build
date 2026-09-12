@@ -3,21 +3,18 @@ import { createClient } from '@/lib/supabase/server';
 import { CONTENT_TYPES } from '@/lib/content-types';
 
 // Placeholder content generators, keyed by content type. Swap this whole
-// block for a real call to the Railway generation service once it exists —
-// something like:
+// block for a real call to the Railway generation service once it exists.
+// The `prompt` received here is already the full combined prompt (fixed
+// expert-persona base + the user's optional extra instructions, joined by
+// ChetakChat before it ever reaches this route) — this route doesn't need
+// to know about that split, it just uses whatever prompt string it's given.
 //
-//   const res = await fetch(`${process.env.GENERATION_SERVICE_URL}/generate`, {
-//     method: 'POST',
-//     headers: { Authorization: `Bearer ${process.env.GENERATION_SERVICE_KEY}` },
-//     body: JSON.stringify({ subObjectId, subName, domain, type, prompt }),
-//   });
-//   const content = await res.json();
-//
-// The `type -> model` routing in lib/content-types.js is where per-content-type
-// model selection would plug in on the real backend (different requirements
-// calling different models) — everything else in this route stays the same.
+// image_prompt and social_post return an { imageDescription, caption? }
+// shape rather than plain text, since those are meant to produce an actual
+// image — there's no real image model wired up yet, so GeneratedOutput
+// renders these as a clearly-labeled placeholder instead of a real photo.
 function withPromptNote(base, prompt) {
-  return prompt ? `${base}\n\n(Additional instruction applied: "${prompt}")` : base;
+  return prompt ? `${base}\n\n(Prompt used: "${prompt}")` : base;
 }
 
 const SAMPLE_GENERATORS = {
@@ -35,23 +32,22 @@ const SAMPLE_GENERATORS = {
       'Deprecated in current EWM releases',
     ],
     correct: 1,
-    note: prompt ? `Additional instruction applied: "${prompt}"` : undefined,
+    note: prompt ? `Prompt used: "${prompt}"` : undefined,
   }),
   scenario: (subName, prompt) =>
     withPromptNote(
       `A warehouse supervisor needs to validate ${subName.toLowerCase()} during peak inbound volume. Walk through how the system behaves end to end, including any manual intervention points.`,
       prompt
     ),
-  image_prompt: (subName, prompt) =>
-    withPromptNote(
-      `"Warehouse operator working with a handheld scanner near labeled storage racks, natural light, editorial photography style — themed around ${subName.toLowerCase()}."\n\n#SAPEWM #WarehouseTech #SupplyChain`,
-      prompt
-    ),
-  social_post: (subName, prompt) =>
-    withPromptNote(
-      `"Most teams underestimate how much ${subName.toLowerCase()} affects downstream accuracy. Here's the 60-second breakdown 👇"`,
-      prompt
-    ),
+  image_prompt: (subName, prompt) => ({
+    imageDescription: `Warehouse operator using a handheld scanner near labeled storage racks, editorial photography style — themed around ${subName.toLowerCase()}.`,
+    note: prompt ? `Prompt used: "${prompt}"` : undefined,
+  }),
+  social_post: (subName, prompt) => ({
+    imageDescription: `Editorial-style photo representing ${subName.toLowerCase()} in a modern warehouse.`,
+    caption: `Most teams underestimate how much ${subName.toLowerCase()} affects downstream accuracy. Here's the 60-second breakdown 👇`,
+    note: prompt ? `Prompt used: "${prompt}"` : undefined,
+  }),
   swim_lane: () => ({ note: 'rendered client-side from the sample diagram' }),
 };
 
