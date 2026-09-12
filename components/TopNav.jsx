@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Layers, GitBranch, Zap, LogOut } from 'lucide-react';
+import { Layers, GitBranch, Zap, LogOut, ClipboardCheck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+
 const TABS = [
   { href: '/dashboard/dukan', label: 'Knowledge Granths', icon: Layers },
   { href: '/dashboard/mela', label: 'Process Flow Mela', icon: GitBranch },
   { href: '/dashboard/chetak', label: 'AI Chetak', icon: Zap },
+  { href: '/dashboard/review', label: 'Review Queue', icon: ClipboardCheck },
 ];
 
 export default function TopNav({ userEmail }) {

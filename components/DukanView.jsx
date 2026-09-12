@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Clock, Circle, ArrowUpRight, Layers } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Check, Clock, Circle, ArrowUpRight, Layers, Send } from 'lucide-react';
 import MainObjectGrid from '@/components/MainObjectGrid';
 import ProcessChips from '@/components/ProcessChips';
 import Modal from '@/components/Modal';
 import { useProcessSelection } from '@/lib/use-process-selection';
 import { docForDomain, statusForDomain, STATUS_LABEL, STATUS_CLASSES } from '@/lib/status';
+import { daysRemaining } from '@/lib/review';
 
 const STATUS_ICON = { accepted: Check, level1_review: Clock, level2_review: Clock, draft: Circle };
 
@@ -16,8 +18,11 @@ function defaultDomainFor(sub) {
 }
 
 export default function DukanView({ tree }) {
+  const router = useRouter();
   const { level, mainId, subId, domain, setLevel, setMain, setSub, setDomain } = useProcessSelection();
   const [modalOpen, setModalOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const mainObjectsForLevel = tree.filter((mo) => mo.level === level);
   const selectedMain = tree.find((mo) => mo.id === mainId) || null;
@@ -36,6 +41,26 @@ export default function DukanView({ tree }) {
     }
     const first = mo.subObjects[0];
     setSub(mo.id, first.id, defaultDomainFor(first));
+  }
+
+  async function submitForReview() {
+    if (!doc) return;
+    setSubmitError('');
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/documents/submit-review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentId: doc.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not submit for review');
+      router.refresh();
+    } catch (err) {
+      setSubmitError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -135,6 +160,51 @@ export default function DukanView({ tree }) {
                     </div>
                   )}
                 </div>
+
+                {status === 'draft' && doc?.signed_url && (
+                  <div className="mt-4 flex items-center gap-3 flex-wrap">
+                    <button
+                      onClick={submitForReview}
+                      disabled={submitting}
+                      className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-accent text-white disabled:opacity-60"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      {submitting ? 'Submitting…' : 'Submit for review'}
+                    </button>
+                    <span className="text-xs text-faint">Starts the 20-day Level 1 + Level 2 review clock.</span>
+                  </div>
+                )}
+                {submitError && <div className="text-xs text-review mt-2">{submitError}</div>}
+
+                {(status === 'level1_review' || status === 'accepted') && doc?.level1_submitted_at && (
+                  <div className="mt-4 rounded-lg border border-border bg-surface p-4 text-xs flex flex-col gap-2">
+                    <div className="flex items-center justify-between flex-wrap gap-1">
+                      <span className="text-faint">
+                        Level 1 — <span className="text-ink font-medium">{doc.level1_reviewer}</span>
+                      </span>
+                      <span className={doc.level1_status === 'approved' || doc.level1_status === 'auto_accepted' ? 'text-accepted' : 'text-review'}>
+                        {doc.level1_status === 'approved' && 'Approved'}
+                        {doc.level1_status === 'auto_accepted' && 'Auto-accepted (no feedback within 20 days)'}
+                        {doc.level1_status === 'revision_requested' && 'Revision requested'}
+                        {!doc.level1_status && daysRemaining(doc.level1_deadline) >= 0 && `${daysRemaining(doc.level1_deadline)} days until auto-accept`}
+                        {!doc.level1_status && daysRemaining(doc.level1_deadline) < 0 && 'Overdue — will auto-accept on next load'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between flex-wrap gap-1">
+                      <span className="text-faint">
+                        Level 2 — <span className="text-ink font-medium">{doc.level2_reviewer}</span>
+                      </span>
+                      <span className={doc.level2_status === 'approved' ? 'text-accepted' : 'text-review'}>
+                        {doc.level2_status === 'approved' && 'Approved'}
+                        {doc.level2_status === 'revision_requested' && 'Revision requested'}
+                        {!doc.level2_status && 'Runs concurrently with Level 1 — no billing impact either way (Section 5.5)'}
+                      </span>
+                    </div>
+                    {doc.revision_count > 0 && (
+                      <div className="text-faint">Revision rounds so far: {doc.revision_count}</div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-sm text-faint">Pick a process above to preview its document.</div>
