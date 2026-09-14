@@ -9,6 +9,7 @@ import Modal from '@/components/Modal';
 import { useProcessSelection } from '@/lib/use-process-selection';
 import { docForDomain, statusForDomain, STATUS_LABEL, STATUS_CLASSES } from '@/lib/status';
 import { daysRemaining } from '@/lib/review';
+import CommentThread from '@/components/CommentThread';
 
 const STATUS_ICON = { accepted: Check, level1_review: Clock, level2_review: Clock, draft: Circle };
 
@@ -203,6 +204,13 @@ export default function DukanView({ tree }) {
                     {doc.revision_count > 0 && (
                       <div className="text-faint">Revision rounds so far: {doc.revision_count}</div>
                     )}
+                  </div>
+                )}
+
+                {doc && (
+                  <div className="mt-4">
+                    <div className="text-xs uppercase tracking-wider text-faint mb-2">Reviewer comments</div>
+                    <CommentThread documentId={doc.id} />
                   </div>
                 )}
               </div>

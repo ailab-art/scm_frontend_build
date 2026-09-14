@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, X, ArrowUpRight, Clock } from 'lucide-react';
 import { daysRemaining } from '@/lib/review';
+import CommentThread from '@/components/CommentThread';
 
 function flattenPending(tree) {
   const rows = [];
@@ -133,6 +134,10 @@ export default function ReviewQueueView({ tree }) {
                     </button>
                   </div>
                 </div>
+              </div>
+
+              <div className="mt-3 pt-3 border-t border-border">
+                <CommentThread documentId={doc.id} canAdd />
               </div>
             </div>
           );
