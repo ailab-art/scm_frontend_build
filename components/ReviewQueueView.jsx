@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, X, ArrowUpRight, Clock } from 'lucide-react';
+import { ArrowUpRight, Clock } from 'lucide-react';
 import { daysRemaining } from '@/lib/review';
 import CommentThread from '@/components/CommentThread';
+import DecisionForm from '@/components/DecisionForm';
+import Modal from '@/components/Modal';
 
 function flattenPending(tree) {
   const rows = [];
@@ -22,27 +24,16 @@ function flattenPending(tree) {
 
 export default function ReviewQueueView({ tree }) {
   const router = useRouter();
-  const [busyKey, setBusyKey] = useState(null);
-  const [error, setError] = useState('');
+  const [activeDecision, setActiveDecision] = useState(null); // { documentId, level, type, subName }
   const rows = flattenPending(tree);
 
-  async function decide(documentId, level, decision) {
-    setError('');
-    setBusyKey(`${documentId}-${level}`);
-    try {
-      const res = await fetch('/api/documents/decide', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentId, level, decision }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not record decision');
-      router.refresh();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusyKey(null);
-    }
+  function openDecision(doc, level, type) {
+    setActiveDecision({ documentId: doc.id, level, type, subName: doc.subName });
+  }
+
+  function handleDone() {
+    setActiveDecision(null);
+    router.refresh();
   }
 
   if (rows.length === 0) {
@@ -58,7 +49,6 @@ export default function ReviewQueueView({ tree }) {
       <div className="text-xs uppercase tracking-wider text-faint mb-4">
         {rows.length} document{rows.length !== 1 ? 's' : ''} awaiting review
       </div>
-      {error && <div className="text-xs text-review mb-3">{error}</div>}
 
       <div className="flex flex-col gap-3">
         {rows.map((doc) => {
@@ -100,18 +90,16 @@ export default function ReviewQueueView({ tree }) {
                   <div className="text-xs text-faint mb-2">Level 1 — {doc.level1_reviewer}</div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => decide(doc.id, 1, 'approved')}
-                      disabled={busyKey === `${doc.id}-1`}
-                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-accepted/10 text-accepted disabled:opacity-50"
+                      onClick={() => openDecision(doc, 1, 'approved')}
+                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-accepted/10 text-accepted"
                     >
-                      <Check className="w-3 h-3" /> Approve
+                      Approve
                     </button>
                     <button
-                      onClick={() => decide(doc.id, 1, 'revision_requested')}
-                      disabled={busyKey === `${doc.id}-1`}
-                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-review/10 text-review disabled:opacity-50"
+                      onClick={() => openDecision(doc, 1, 'revision_requested')}
+                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-review/10 text-review"
                     >
-                      <X className="w-3 h-3" /> Request revision
+                      Request revision
                     </button>
                   </div>
                 </div>
@@ -119,30 +107,45 @@ export default function ReviewQueueView({ tree }) {
                   <div className="text-xs text-faint mb-2">Level 2 — {doc.level2_reviewer}</div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => decide(doc.id, 2, 'approved')}
-                      disabled={busyKey === `${doc.id}-2`}
-                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-accepted/10 text-accepted disabled:opacity-50"
+                      onClick={() => openDecision(doc, 2, 'approved')}
+                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-accepted/10 text-accepted"
                     >
-                      <Check className="w-3 h-3" /> Approve
+                      Approve
                     </button>
                     <button
-                      onClick={() => decide(doc.id, 2, 'revision_requested')}
-                      disabled={busyKey === `${doc.id}-2`}
-                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-review/10 text-review disabled:opacity-50"
+                      onClick={() => openDecision(doc, 2, 'revision_requested')}
+                      className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-review/10 text-review"
                     >
-                      <X className="w-3 h-3" /> Request revision
+                      Request revision
                     </button>
                   </div>
                 </div>
               </div>
 
               <div className="mt-3 pt-3 border-t border-border">
-                <CommentThread documentId={doc.id} canAdd />
+                <div className="text-xs uppercase tracking-wider text-faint mb-2">Past comments</div>
+                <CommentThread documentId={doc.id} />
               </div>
             </div>
           );
         })}
       </div>
+
+      <Modal
+        open={!!activeDecision}
+        onClose={() => setActiveDecision(null)}
+        title={activeDecision ? `${activeDecision.type === 'revision_requested' ? 'Request revision' : 'Approve'} — Level ${activeDecision.level} — ${activeDecision.subName}` : ''}
+      >
+        {activeDecision && (
+          <DecisionForm
+            documentId={activeDecision.documentId}
+            level={activeDecision.level}
+            type={activeDecision.type}
+            onDone={handleDone}
+            onCancel={() => setActiveDecision(null)}
+          />
+        )}
+      </Modal>
     </div>
   );
 }
