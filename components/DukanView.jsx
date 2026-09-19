@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, Clock, Circle, ArrowUpRight, Layers, Send, Upload } from 'lucide-react';
 import MainObjectGrid from '@/components/MainObjectGrid';
@@ -26,6 +26,11 @@ export default function DukanView({ tree }) {
   const [submitError, setSubmitError] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [showReplace, setShowReplace] = useState(false);
+  const [revisionFile, setRevisionFile] = useState(null);
+  const [revisionComment, setRevisionComment] = useState('');
+  const [revisionSubmitting, setRevisionSubmitting] = useState(false);
+  const [revisionError, setRevisionError] = useState('');
 
   const mainObjectsForLevel = tree.filter((mo) => mo.level === level);
   const selectedMain = tree.find((mo) => mo.id === mainId) || null;
@@ -45,6 +50,15 @@ export default function DukanView({ tree }) {
     const first = mo.subObjects[0];
     setSub(mo.id, first.id, defaultDomainFor(first));
   }
+
+  // Close the replace-document form when the selected process changes,
+  // rather than leaving a half-filled revision form pointed at the wrong doc.
+  useEffect(() => {
+    setShowReplace(false);
+    setRevisionFile(null);
+    setRevisionComment('');
+    setRevisionError('');
+  }, [selectedSub?.id, domain]);
 
   async function submitForReview() {
     if (!doc) return;
@@ -85,6 +99,44 @@ export default function DukanView({ tree }) {
       setUploadError(err.message);
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function submitRevision() {
+    if (!revisionFile || !revisionComment.trim() || !doc || !selectedSub) return;
+    setRevisionError('');
+    setRevisionSubmitting(true);
+    try {
+      const commentRes = await fetch('/api/documents/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentId: doc.id,
+          level: null,
+          section: 'General',
+          kind: 'comment',
+          body: `Revised document uploaded: ${revisionComment.trim()}`,
+        }),
+      });
+      const commentData = await commentRes.json();
+      if (!commentRes.ok) throw new Error(commentData.error || 'Could not save revision comment');
+
+      const formData = new FormData();
+      formData.append('file', revisionFile);
+      formData.append('subObjectId', selectedSub.id);
+      formData.append('domain', domain);
+      const uploadRes = await fetch('/api/documents/upload', { method: 'POST', body: formData });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(uploadData.error || 'Upload failed');
+
+      setShowReplace(false);
+      setRevisionFile(null);
+      setRevisionComment('');
+      router.refresh();
+    } catch (err) {
+      setRevisionError(err.message);
+    } finally {
+      setRevisionSubmitting(false);
     }
   }
 
@@ -167,6 +219,57 @@ export default function DukanView({ tree }) {
                         This link expires after an hour — it's regenerated automatically the next time this page loads.
                         {status !== 'accepted' && ' Viewable pre-approval so reviewers can actually read it.'}
                       </div>
+
+                      {!showReplace ? (
+                        <button
+                          onClick={() => setShowReplace(true)}
+                          className="text-xs px-3 py-1.5 rounded-md border border-border text-faint hover:text-ink mt-3"
+                        >
+                          Replace with revised version
+                        </button>
+                      ) : (
+                        <div className="mt-3 rounded-lg border border-border bg-surface p-3">
+                          <div className="text-xs font-medium text-ink mb-2">Upload revised version</div>
+                          <textarea
+                            value={revisionComment}
+                            onChange={(e) => setRevisionComment(e.target.value)}
+                            rows={2}
+                            placeholder="What was revised? (required)"
+                            className="w-full text-xs px-2.5 py-2 rounded-md border border-border bg-base text-ink outline-none focus:border-accent mb-2"
+                          />
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <label className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-md border border-dashed border-border-strong text-muted hover:border-accent hover:text-ink cursor-pointer">
+                              <Upload className="w-3.5 h-3.5" />
+                              {revisionFile ? revisionFile.name : 'Choose PDF'}
+                              <input
+                                type="file"
+                                accept="application/pdf"
+                                className="hidden"
+                                onChange={(e) => setRevisionFile(e.target.files?.[0] || null)}
+                              />
+                            </label>
+                            <button
+                              onClick={submitRevision}
+                              disabled={revisionSubmitting || !revisionFile || !revisionComment.trim()}
+                              className="text-xs px-3 py-1.5 rounded-md bg-accent text-white disabled:opacity-50"
+                            >
+                              {revisionSubmitting ? 'Uploading…' : 'Upload revision'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setShowReplace(false);
+                                setRevisionFile(null);
+                                setRevisionComment('');
+                                setRevisionError('');
+                              }}
+                              className="text-xs px-3 py-1.5 rounded-md text-faint"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          {revisionError && <div className="text-xs text-review mt-2">{revisionError}</div>}
+                        </div>
+                      )}
                     </div>
                   ) : status === 'accepted' ? (
                     <div>

@@ -27,11 +27,11 @@ export async function POST(request) {
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const { documentId, level, section, kind, body } = await request.json();
-  if (!documentId || ![1, 2].includes(level) || !section || !['comment', 'suggestion'].includes(kind) || !body?.trim()) {
+  if (!documentId || (level !== null && level !== undefined && ![1, 2].includes(level)) || !section || !['comment', 'suggestion'].includes(kind) || !body?.trim()) {
     return NextResponse.json({ error: 'Missing or invalid fields' }, { status: 400 });
   }
 
-  const reviewer = level === 1 ? LEVEL1_REVIEWER : LEVEL2_REVIEWER;
+  const reviewer = level === 1 ? LEVEL1_REVIEWER : level === 2 ? LEVEL2_REVIEWER : null;
 
   const { data, error } = await supabase
     .from('review_comments')

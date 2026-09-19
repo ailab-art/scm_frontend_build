@@ -74,7 +74,7 @@ export default function CommentThread({ documentId, canAdd = false }) {
                   {c.kind === 'suggestion' ? 'Suggestion' : 'Comment'}
                 </span>
                 <span className="text-faint ml-auto">
-                  L{c.level} · {c.reviewer} · {new Date(c.created_at).toLocaleDateString()}
+                  {c.level ? `L${c.level}` : 'Revision note'} · {c.reviewer || 'Uploader'} · {new Date(c.created_at).toLocaleDateString()}
                 </span>
               </div>
               <div className="text-ink">{c.body}</div>
