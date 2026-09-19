@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Clock, Circle, ArrowUpRight, Layers, Send } from 'lucide-react';
+import { Check, Clock, Circle, ArrowUpRight, Layers, Send, Upload } from 'lucide-react';
 import MainObjectGrid from '@/components/MainObjectGrid';
 import ProcessChips from '@/components/ProcessChips';
 import Modal from '@/components/Modal';
@@ -24,6 +24,8 @@ export default function DukanView({ tree }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   const mainObjectsForLevel = tree.filter((mo) => mo.level === level);
   const selectedMain = tree.find((mo) => mo.id === mainId) || null;
@@ -61,6 +63,28 @@ export default function DukanView({ tree }) {
       setSubmitError(err.message);
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file name later
+    if (!file || !selectedSub) return;
+    setUploadError('');
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('subObjectId', selectedSub.id);
+      formData.append('domain', domain);
+      const res = await fetch('/api/documents/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      router.refresh();
+    } catch (err) {
+      setUploadError(err.message);
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -145,19 +169,49 @@ export default function DukanView({ tree }) {
                       </div>
                     </div>
                   ) : status === 'accepted' ? (
-                    <div className="text-xs text-review">
-                      Marked accepted, but no file is attached yet — set <code className="font-mono">storage_path</code> on this document row in Supabase.
+                    <div>
+                      <div className="text-xs text-review mb-3">Marked accepted, but no file is attached yet.</div>
+                      <label
+                        className={`inline-flex items-center gap-2 text-xs px-3 py-2 rounded-md border border-dashed border-border-strong text-muted hover:border-accent hover:text-ink ${
+                          uploading ? 'opacity-60 cursor-wait' : 'cursor-pointer'
+                        }`}
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        {uploading ? 'Uploading…' : 'Upload PDF'}
+                        <input type="file" accept="application/pdf" className="hidden" disabled={uploading} onChange={handleFileChange} />
+                      </label>
+                      {uploadError && <div className="text-xs text-review mt-2">{uploadError}</div>}
                     </div>
                   ) : (
                     <div>
                       <div className="text-xs mb-4 text-faint">
                         {status === 'draft' ? 'Not yet submitted for review' : 'Awaiting reviewer feedback'}
                       </div>
-                      <div className="flex flex-col gap-2.5">
+                      <div className="flex flex-col gap-2.5 mb-4">
                         <div className="h-2.5 rounded bg-border-strong animate-lia-pulse" style={{ width: '85%' }} />
                         <div className="h-2.5 rounded bg-border-strong animate-lia-pulse" style={{ width: '95%', animationDelay: '.2s' }} />
                         <div className="h-2.5 rounded bg-border-strong animate-lia-pulse" style={{ width: '60%', animationDelay: '.4s' }} />
                       </div>
+                      {status === 'draft' && (
+                        <div>
+                          <label
+                            className={`inline-flex items-center gap-2 text-xs px-3 py-2 rounded-md border border-dashed border-border-strong text-muted hover:border-accent hover:text-ink ${
+                              uploading ? 'opacity-60 cursor-wait' : 'cursor-pointer'
+                            }`}
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            {uploading ? 'Uploading…' : `Upload PDF (saves as ${domain === 'Standard' ? `${selectedSub.id}.pdf` : `${selectedSub.id}-${domain}.pdf`})`}
+                            <input
+                              type="file"
+                              accept="application/pdf"
+                              className="hidden"
+                              disabled={uploading}
+                              onChange={handleFileChange}
+                            />
+                          </label>
+                          {uploadError && <div className="text-xs text-review mt-2">{uploadError}</div>}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
