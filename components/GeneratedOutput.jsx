@@ -31,14 +31,19 @@ export default function GeneratedOutput({ type, content }) {
   if (type === 'image_prompt' || type === 'social_post') {
     return (
       <div>
-        <div className="rounded-lg border border-dashed border-border-strong bg-base flex flex-col items-center justify-center py-8 px-4 mb-3">
-          <ImageIcon className="w-7 h-7 text-faint mb-2" />
-          <div className="text-xs text-faint text-center max-w-xs">{content.imageDescription}</div>
-        </div>
+        {content.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={content.imageUrl} alt={content.imageDescription || 'Generated image'} className="w-full rounded-lg border border-border mb-3" />
+        ) : (
+          <div className="rounded-lg border border-dashed border-border-strong bg-base flex flex-col items-center justify-center py-8 px-4 mb-3">
+            <ImageIcon className="w-7 h-7 text-faint mb-2" />
+            <div className="text-xs text-faint text-center max-w-xs">{content.imageDescription}</div>
+            <div className="text-xs text-review mt-2">
+              Placeholder — no image model configured yet (set AI_IMAGE_API_KEY).
+            </div>
+          </div>
+        )}
         {content.caption && <div className="text-sm whitespace-pre-line leading-7 mb-2">{content.caption}</div>}
-        <div className="text-xs text-review">
-          Image placeholder — real generation needs an image model connected (not yet decided/wired up).
-        </div>
         {content.note && <div className="text-xs text-faint mt-1">{content.note}</div>}
       </div>
     );

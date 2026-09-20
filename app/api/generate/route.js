@@ -1,55 +1,77 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { CONTENT_TYPES } from '@/lib/content-types';
+import { AI_CONFIGURED, modelIdFor, callTextModel, callTextModelJSON, callImageModel } from '@/lib/ai';
 
-// Placeholder content generators, keyed by content type. Swap this whole
-// block for a real call to the Railway generation service once it exists.
-// The `prompt` received here is already the full combined prompt (fixed
-// expert-persona base + the user's optional extra instructions, joined by
-// ChetakChat before it ever reaches this route) — this route doesn't need
-// to know about that split, it just uses whatever prompt string it's given.
-//
-// image_prompt and social_post return an { imageDescription, caption? }
-// shape rather than plain text, since those are meant to produce an actual
-// image — there's no real image model wired up yet, so GeneratedOutput
-// renders these as a clearly-labeled placeholder instead of a real photo.
-function withPromptNote(base, prompt) {
-  return prompt ? `${base}\n\n(Prompt used: "${prompt}")` : base;
+// Falls back to the original placeholder generators when no API key is
+// configured yet, so a fresh deploy doesn't just error out before anyone's
+// added AI_TEXT_API_KEY / AI_IMAGE_API_KEY. Once those are set, every call
+// below goes to a real model.
+function mockOutput(typeId, subName, prompt) {
+  const note = prompt ? `\n\n(Prompt used: "${prompt}")` : '';
+  switch (typeId) {
+    case 'video_script':
+      return `"In today's module, we're breaking down ${subName.toLowerCase()} inside SAP EWM. By the end of this two-minute walkthrough, you'll know exactly which configuration steps matter and why."${note}`;
+    case 'mcq':
+      return {
+        question: `Which statement best describes "${subName}"?`,
+        options: [
+          'Handled entirely by ERP, not EWM',
+          'Configured through EWM master data and process types',
+          'Only relevant to the Pharma domain',
+          'Deprecated in current EWM releases',
+        ],
+        correct: 1,
+        note: prompt ? `Prompt used: "${prompt}"` : undefined,
+      };
+    case 'scenario':
+      return `A warehouse supervisor needs to validate ${subName.toLowerCase()} during peak inbound volume. Walk through how the system behaves end to end, including any manual intervention points.${note}`;
+    case 'image_prompt':
+      return { imageUrl: null, imageDescription: `Warehouse operator using a handheld scanner — themed around ${subName.toLowerCase()}.`, note };
+    case 'social_post':
+      return {
+        imageUrl: null,
+        imageDescription: `Editorial-style photo representing ${subName.toLowerCase()} in a modern warehouse.`,
+        caption: `Most teams underestimate how much ${subName.toLowerCase()} affects downstream accuracy. Here's the 60-second breakdown 👇`,
+        note,
+      };
+    case 'swim_lane':
+      return { note: 'rendered client-side from the sample diagram' };
+    default:
+      return null;
+  }
 }
 
-const SAMPLE_GENERATORS = {
-  video_script: (subName, prompt) =>
-    withPromptNote(
-      `"In today's module, we're breaking down ${subName.toLowerCase()} inside SAP EWM. By the end of this two-minute walkthrough, you'll know exactly which configuration steps matter and why."`,
-      prompt
-    ),
-  mcq: (subName, prompt) => ({
-    question: `Which statement best describes "${subName}"?`,
-    options: [
-      'Handled entirely by ERP, not EWM',
-      'Configured through EWM master data and process types',
-      'Only relevant to the Pharma domain',
-      'Deprecated in current EWM releases',
-    ],
-    correct: 1,
-    note: prompt ? `Prompt used: "${prompt}"` : undefined,
-  }),
-  scenario: (subName, prompt) =>
-    withPromptNote(
-      `A warehouse supervisor needs to validate ${subName.toLowerCase()} during peak inbound volume. Walk through how the system behaves end to end, including any manual intervention points.`,
-      prompt
-    ),
-  image_prompt: (subName, prompt) => ({
-    imageDescription: `Warehouse operator using a handheld scanner near labeled storage racks, editorial photography style — themed around ${subName.toLowerCase()}.`,
-    note: prompt ? `Prompt used: "${prompt}"` : undefined,
-  }),
-  social_post: (subName, prompt) => ({
-    imageDescription: `Editorial-style photo representing ${subName.toLowerCase()} in a modern warehouse.`,
-    caption: `Most teams underestimate how much ${subName.toLowerCase()} affects downstream accuracy. Here's the 60-second breakdown 👇`,
-    note: prompt ? `Prompt used: "${prompt}"` : undefined,
-  }),
-  swim_lane: () => ({ note: 'rendered client-side from the sample diagram' }),
-};
+async function realOutput(typeId, subName, prompt) {
+  const contentType = CONTENT_TYPES.find((c) => c.id === typeId);
+  const modelId = modelIdFor(typeId);
+
+  if (typeId === 'mcq') {
+    const result = await callTextModelJSON(modelId, prompt);
+    return result.parseError
+      ? { question: 'Model returned unparseable output', options: [result.raw], correct: 0 }
+      : result;
+  }
+  if (typeId === 'video_script' || typeId === 'scenario') {
+    return await callTextModel(modelId, prompt);
+  }
+  if (typeId === 'image_prompt') {
+    const imageUrl = await callImageModel(modelId, prompt);
+    return { imageUrl, imageDescription: prompt };
+  }
+  if (typeId === 'social_post') {
+    const [caption, imageUrl] = await Promise.all([
+      callTextModel(modelId, prompt),
+      callImageModel(contentType.imageModelId, `Editorial photo for a LinkedIn post about ${subName}`),
+    ]);
+    return { imageUrl, caption, imageDescription: `Editorial photo representing ${subName}` };
+  }
+  if (typeId === 'swim_lane') {
+    const description = await callTextModel(modelId, prompt);
+    return { note: description };
+  }
+  return null;
+}
 
 export async function POST(request) {
   const supabase = createClient();
@@ -60,13 +82,26 @@ export async function POST(request) {
   }
 
   const { subObjectId, subName, domain, type, prompt } = await request.json();
-  const generator = SAMPLE_GENERATORS[type];
-  if (!subObjectId || !domain || !generator) {
+  const contentType = CONTENT_TYPES.find((c) => c.id === type);
+  if (!subObjectId || !domain || !contentType) {
     return NextResponse.json({ error: 'Missing or unknown content type' }, { status: 400 });
   }
 
-  const content = generator(subName, prompt);
-  const model = CONTENT_TYPES.find((c) => c.id === type)?.model || 'unassigned';
+  const needsImage = contentType.kind === 'image' || contentType.kind === 'image+caption';
+  const configured = contentType.kind === 'image' ? AI_CONFIGURED.image : AI_CONFIGURED.text && (!needsImage || AI_CONFIGURED.image);
+
+  let content;
+  let usedMock = false;
+  try {
+    content = configured ? await realOutput(type, subName, prompt) : mockOutput(type, subName, prompt);
+    usedMock = !configured;
+  } catch (err) {
+    // Real call failed (bad key, rate limit, provider outage) — fall back to
+    // the mock rather than losing the request entirely, but say so plainly.
+    console.error('generation error, falling back to mock:', err.message);
+    content = mockOutput(type, subName, prompt);
+    usedMock = true;
+  }
 
   const { data, error } = await supabase
     .from('generated_assets')
@@ -81,5 +116,5 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ asset: data, model });
+  return NextResponse.json({ asset: data, model: usedMock ? `${contentType.model} (placeholder — not configured)` : contentType.model });
 }
